@@ -146,7 +146,7 @@ def get_isp_precise(ip):
     ip_num = ip_to_int(ip)
     
     # 电信主要IP段（精确）
-    2telecom_ranges = [
+    telecom_ranges = [
         (ip_to_int("1.0.0.0"), ip_to_int("1.255.255.255")),
         (ip_to_int("14.0.0.0"), ip_to_int("14.255.255.255")),
         (ip_to_int("27.0.0.0"), ip_to_int("27.255.255.255")),
