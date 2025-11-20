@@ -131,9 +131,9 @@ def first_stage():
     return run_count
 
 # ===============================
-# 第二阶段 - 修改为同时生成 rtp 和 udp 格式
+# 第二阶段 - 修改为只生成rtp格式
 def second_stage():
-    print("🔔 第二阶段触发：生成 zubo.txt（支持 rtp 和 udp 格式）")
+    print("🔔 第二阶段触发：生成 zubo.txt（仅生成rtp格式）")
     combined_lines = []
     for ip_file in os.listdir(IP_DIR):
         if not ip_file.endswith(".txt"):
@@ -161,13 +161,9 @@ def second_stage():
                 if multicast_match:
                     multicast_addr = multicast_match.group(1)
                     
-                    # 生成 rtp 格式地址
+                    # 只生成rtp格式地址
                     rtp_format_url = f"http://{ip_port}/rtp/{multicast_addr}"
                     combined_lines.append(f"{ch_name},{rtp_format_url}")
-                    
-                    # 生成 udp 格式地址
-                    udp_format_url = f"http://{ip_port}/udp/{multicast_addr}"
-                    combined_lines.append(f"{ch_name},{udp_format_url}")
 
     # 去重
     unique = {}
@@ -179,12 +175,12 @@ def second_stage():
     with open(ZUBO_FILE, "w", encoding="utf-8") as f:
         for line in unique.values():
             f.write(line + "\n")
-    print(f"🎯 第二阶段完成，共 {len(unique)} 条有效 URL（包含 rtp 和 udp 格式）")
+    print(f"🎯 第二阶段完成，共 {len(unique)} 条有效 URL（仅rtp格式）")
 
 # ===============================
-# 第三阶段 - 修改为同时检测 rtp 和 udp 格式
+# 第三阶段 - 修改为先检测rtp，失败则尝试udp
 def third_stage():
-    print("🧩 第三阶段：多线程检测代表频道生成 IPTV.txt（支持 rtp 和 udp 格式）")
+    print("🧩 第三阶段：多线程检测频道生成 IPTV.txt（优先rtp，失败则尝试udp）")
 
     if not os.path.exists(ZUBO_FILE):
         print("⚠️ zubo.txt 不存在，跳过")
@@ -218,7 +214,8 @@ def third_stage():
                 ip_port = line.strip()
                 ip_info[ip_port] = province_operator
 
-    groups = {}
+    # 读取zubo.txt中的频道信息（都是rtp格式）
+    channels_by_ip = {}
     with open(ZUBO_FILE, encoding="utf-8") as f:
         for line in f:
             if "," not in line:
@@ -228,75 +225,68 @@ def third_stage():
             m = re.match(r"http://(\d+\.\d+\.\d+\.\d+:\d+)/", url)
             if m:
                 ip_port = m.group(1)
-                groups.setdefault(ip_port, []).append((ch_main, url))
+                # 提取组播地址
+                multicast_match = re.search(r'/rtp/(.+)', url)
+                if multicast_match:
+                    multicast_addr = multicast_match.group(1)
+                    channels_by_ip.setdefault(ip_port, []).append((ch_main, multicast_addr))
 
-    def detect_ip(ip_port, entries):
-        # 检测 rtp 格式的代表频道
-        rtp_rep_channels = [u for c, u in entries if c == "CCTV-1综合" and "/rtp/" in u]
-        if not rtp_rep_channels:
-            # 如果没有找到 CCTV-1综合，尝试其他代表频道
-            rtp_rep_channels = [u for c, u in entries if c in ["CCTV-1综合", "CCTV1", "CCTV-1"] and "/rtp/" in u]
+    def detect_channel(ip_port, ch_main, multicast_addr):
+        # 先尝试rtp格式
+        rtp_url = f"http://{ip_port}/rtp/{multicast_addr}"
+        if check_stream(rtp_url):
+            return ip_port, ch_main, rtp_url, "rtp"
         
-        # 检测 udp 格式的代表频道
-        udp_rep_channels = [u for c, u in entries if c == "CCTV-1综合" and "/udp/" in u]
-        if not udp_rep_channels:
-            # 如果没有找到 CCTV-1综合，尝试其他代表频道
-            udp_rep_channels = [u for c, u in entries if c in ["CCTV-1综合", "CCTV1", "CCTV-1"] and "/udp/" in u]
+        # rtp格式失败，尝试udp格式
+        udp_url = f"http://{ip_port}/udp/{multicast_addr}"
+        if check_stream(udp_url):
+            return ip_port, ch_main, udp_url, "udp"
         
-        # 如果都没有找到代表频道，使用第一个频道作为代表
-        if not rtp_rep_channels and not udp_rep_channels and entries:
-            first_channel = entries[0][1]
-            if "/rtp/" in first_channel:
-                rtp_rep_channels = [first_channel]
-            else:
-                udp_rep_channels = [first_channel]
-        
-        # 检测两种格式的代表频道
-        rtp_playable = any(check_stream(u) for u in rtp_rep_channels) if rtp_rep_channels else False
-        udp_playable = any(check_stream(u) for u in udp_rep_channels) if udp_rep_channels else False
-        
-        return ip_port, rtp_playable, udp_playable
+        # 两种格式都失败
+        return ip_port, ch_main, None, None
 
-    print(f"🚀 启动多线程检测（共 {len(groups)} 个 IP）...")
-    playable_ips = {}
+    print(f"🚀 启动多线程检测（共 {len(channels_by_ip)} 个 IP）...")
+    
+    valid_channels = []
+    total_channels = sum(len(channels) for channels in channels_by_ip.values())
+    processed = 0
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(detect_ip, ip, chs): ip for ip, chs in groups.items()}
-        for future in concurrent.futures.as_completed(futures):
-            ip_port, rtp_ok, udp_ok = future.result()
-            playable_ips[ip_port] = {"rtp": rtp_ok, "udp": udp_ok}
-
-    print(f"✅ 检测完成，可播放 IP 统计：")
-    rtp_count = sum(1 for ip in playable_ips.values() if ip["rtp"])
-    udp_count = sum(1 for ip in playable_ips.values() if ip["udp"])
-    print(f"   - RTP 格式可用: {rtp_count} 个")
-    print(f"   - UDP 格式可用: {udp_count} 个")
-    print(f"   - 总计可用 IP: {len([ip for ip in playable_ips.values() if ip['rtp'] or ip['udp']])} 个")
-
-    valid_lines = []
-    seen = set()
-
-    for ip_port, formats in playable_ips.items():
-        province_operator = ip_info.get(ip_port, "未知")
+        # 为每个频道创建检测任务
+        futures = []
+        for ip_port, channels in channels_by_ip.items():
+            for ch_main, multicast_addr in channels:
+                futures.append(executor.submit(detect_channel, ip_port, ch_main, multicast_addr))
         
-        # 只处理可用的格式
-        available_formats = []
-        if formats["rtp"]:
-            available_formats.append("rtp")
-        if formats["udp"]:
-            available_formats.append("udp")
+        # 处理检测结果
+        for future in concurrent.futures.as_completed(futures):
+            ip_port, ch_main, url, format_type = future.result()
+            processed += 1
             
-        if not available_formats:
-            continue
-            
-        # 获取该IP的所有频道
-        for c, u in groups[ip_port]:
-            # 检查URL格式是否可用
-            url_format = "rtp" if "/rtp/" in u else "udp"
-            if url_format in available_formats:
-                key = f"{c},{u}"
-                if key not in seen:
-                    seen.add(key)
-                    valid_lines.append(f"{c},{u}${province_operator}")
+            if url:  # 如果检测成功
+                province_operator = ip_info.get(ip_port, "未知")
+                valid_channels.append((ch_main, url, province_operator))
+                
+            # 打印进度
+            if processed % 100 == 0 or processed == total_channels:
+                print(f"📊 检测进度: {processed}/{total_channels}，有效频道: {len(valid_channels)}")
+
+    print(f"✅ 检测完成，有效频道: {len(valid_channels)} 个")
+    
+    # 统计格式使用情况
+    rtp_count = sum(1 for _, url, _ in valid_channels if "/rtp/" in url)
+    udp_count = sum(1 for _, url, _ in valid_channels if "/udp/" in url)
+    print(f"   - RTP 格式: {rtp_count} 个")
+    print(f"   - UDP 格式: {udp_count} 个")
+
+    # 去重
+    seen = set()
+    unique_channels = []
+    for ch_main, url, province_operator in valid_channels:
+        key = f"{ch_main},{url}"
+        if key not in seen:
+            seen.add(key)
+            unique_channels.append(f"{ch_main},{url}${province_operator}")
 
     beijing_now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
     disclaimer_url = "https://kakaxi-1.asia/LOGO/Disclaimer.mp4"
@@ -309,13 +299,13 @@ def third_stage():
         for category, ch_list in CHANNEL_CATEGORIES.items():
             f.write(f"{category},#genre#\n")
             for ch in ch_list:
-                for line in valid_lines:
+                for line in unique_channels:
                     name = line.split(",", 1)[0]
                     if name == ch:
                         f.write(line + "\n")
             f.write("\n")
 
-    print(f"🎯 IPTV.txt 生成完成（含更新时间），共 {len(valid_lines)} 条频道（包含 rtp 和 udp 格式）")
+    print(f"🎯 IPTV.txt 生成完成（含更新时间），共 {len(unique_channels)} 条频道")
 
 # ===============================
 # 文件推送  
