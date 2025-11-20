@@ -92,7 +92,7 @@ def get_isp(ip):
         return "未知"
 
 # ===============================
-# 第一阶段
+# 第一阶段 - 修改文件名生成逻辑
 def first_stage():
     all_ips = set()
     for url, filename in FOFA_URLS.items():
@@ -115,7 +115,10 @@ def first_stage():
             isp = get_isp(ip)
             if isp == "未知":
                 continue
-            fname = f"{province}{isp}.txt"
+            
+            # 去除"省"和"市"字样
+            province_clean = province.replace("省", "").replace("市", "")
+            fname = f"{province_clean}{isp}.txt"
             province_isp_dict.setdefault(fname, set()).add(ip_port)
         except Exception:
             continue
@@ -207,6 +210,7 @@ def third_stage():
     for fname in os.listdir(IP_DIR):
         if not fname.endswith(".txt"):
             continue
+        # 注意：这里保留原始文件名（已去除省市字样）
         province_operator = fname.replace(".txt", "")
         path = os.path.join(IP_DIR, fname)
         with open(path, encoding="utf-8") as f:
