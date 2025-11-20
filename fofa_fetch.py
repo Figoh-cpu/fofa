@@ -56,13 +56,13 @@ CHANNEL_CATEGORIES = {
 ],
 "四川频道":[
 "四川文化旅游","四川经济","四川新闻","四川影视文艺","四川峨眉电影","四川星空购物","四川妇女儿童","四川科教","四川乡村","熊猫新闻","熊猫体娱","熊猫少儿","熊猫影院","云看熊猫","金熊猫卡通","蓉城先锋","成都新闻综合","成都经济资讯服务","成都都市科教","成都影视文艺","成都公共","成都少儿","成都每日购物","熊猫爱生活","i成都","大爱四川","大爱旅游","大爱生活","大爱时尚","红原日干乔","红原月亮湾","四川电信导视3","雅克音乐节直播","雅克音乐节宣传","云演艺宣传","华西证券","四川爱上4K","四川4K视界","四川精彩导视","四川家政频道","四川经典电影","四川华语影院","四川星光院线","四川全球大片","四川热播剧场","四川热门剧场","四川健康养生","四川谍战剧场","四川宝宝动画","四川青春动漫","四川热门综艺","四川音乐现场","四川戏曲精选","四川魅力时尚","四川百变课堂","四川电竞天堂","四川红色影院","四川经典剧场","四川爱体育","四川爱生活","四川爱浪漫","四川爱喜剧","四川爱奇谈","四川爱科幻","四川爱院线","四川爱谍战","四川爱历史","四川爱悬疑","四川爱旅行","四川爱幼教","四川爱玩具","四川爱动漫","四川爱赛车","四川爱宠物","四川少儿天地","四川收视指南","四川中国体育1","四川中国体育2","四川中国体育3","四川直播室1","四川直播室2","四川直播室3","四川直播室4","四川直播室5","四川直播室6","四川直播室7","四川直播室8"
-]
-#任意添加，与仓库中rtp/省份运营商.txt内频道一致即可，或在下方频道名映射中改名
+],#任意添加，与仓库中rtp/省份运营商.txt内频道一致即可，或在下方频道名映射中改名
 }
+
 # ===== 映射（别名 -> 标准名） =====
 CHANNEL_MAPPING = {
 
-}#格式为"频道分类中的标准名": ["rtp/中的名字"]
+}#格式为"频道分类中的标准名": ["rtp/中的名字"],
 
 # ===============================
 # 计数逻辑
@@ -92,19 +92,163 @@ def check_and_clear_files_by_run_count():
         return "a", count
 
 # ===============================
-# IP 运营商判断
-def get_isp(ip):
-    if re.match(r"^(1[0-9]{2}|2[0-3]{2}|42|43|58|59|60|61|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|175|180|182|183|184|185|186|187|188|189|223)\.", ip):
-        return "电信"
-    elif re.match(r"^(42|43|58|59|60|61|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|175|180|182|183|184|185|186|187|188|189|223)\.", ip):
-        return "联通"
-    elif re.match(r"^(223|36|37|38|39|100|101|102|103|104|105|106|107|108|109|134|135|136|137|138|139|150|151|152|157|158|159|170|178|182|183|184|187|188|189)\.", ip):
-        return "移动"
-    else:
-        return "未知"
+# 精确IP运营商判断
+def get_isp_precise(ip):
+    """
+    使用精确的IP段数据库判断运营商
+    返回: "电信", "联通", "移动", "广电", "教育网", "未知"
+    """
+    try:
+        # 方案1: 使用ipapi.is（免费，无需API key）
+        resp = requests.get(f"http://ipapi.is/{ip}", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            asn_org = data.get("asn", {}).get("org", "").upper()
+            isp = data.get("connection", {}).get("isp", "").upper()
+            
+            # 关键词匹配
+            if any(x in asn_org or x in isp for x in ["CHINANET", "TELECOM", "电信"]):
+                return "电信"
+            elif any(x in asn_org or x in isp for x in ["UNICOM", "CNC", "联通", "网通"]):
+                return "联通" 
+            elif any(x in asn_org or x in isp for x in ["CMNET", "MOBILE", "移动"]):
+                return "移动"
+            elif any(x in asn_org or x in isp for x in ["CBN", "广电"]):
+                return "广电"
+            elif any(x in asn_org or x in isp for x in ["CERNET", "教育网"]):
+                return "教育网"
+        
+        # 方案2: 备用 - 使用ip-api.com
+        resp = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            isp = data.get("isp", "").upper()
+            asn = data.get("as", "").upper()
+            
+            if any(x in isp or x in asn for x in ["CHINANET", "TELECOM", "电信"]):
+                return "电信"
+            elif any(x in isp or x in asn for x in ["UNICOM", "CNC", "联通"]):
+                return "联通"
+            elif any(x in isp or x in asn for x in ["CMNET", "MOBILE", "移动"]):
+                return "移动"
+            elif any(x in isp or x in asn for x in ["CBN", "广电"]):
+                return "广电"
+                
+    except Exception:
+        pass
+    
+    # 方案3: 最终备用 - 基于已知精确IP段
+    def ip_to_int(ip):
+        """将IP地址转换为整数"""
+        parts = ip.split('.')
+        return (int(parts[0]) << 24) + (int(parts[1]) << 16) + (int(parts[2]) << 8) + int(parts[3])
+    
+    ip_num = ip_to_int(ip)
+    
+    # 电信主要IP段（精确）
+    2telecom_ranges = [
+        (ip_to_int("1.0.0.0"), ip_to_int("1.255.255.255")),
+        (ip_to_int("14.0.0.0"), ip_to_int("14.255.255.255")),
+        (ip_to_int("27.0.0.0"), ip_to_int("27.255.255.255")),
+        (ip_to_int("36.0.0.0"), ip_to_int("36.255.255.255")),
+        (ip_to_int("42.0.0.0"), ip_to_int("42.255.255.255")),
+        (ip_to_int("49.0.0.0"), ip_to_int("49.255.255.255")),
+        (ip_to_int("58.0.0.0"), ip_to_int("58.255.255.255")),
+        (ip_to_int("60.0.0.0"), ip_to_int("60.255.255.255")),
+        (ip_to_int("110.0.0.0"), ip_to_int("110.255.255.255")),
+        (ip_to_int("111.0.0.0"), ip_to_int("111.255.255.255")),
+        (ip_to_int("112.0.0.0"), ip_to_int("112.255.255.255")),
+        (ip_to_int("113.0.0.0"), ip_to_int("113.255.255.255")),
+        (ip_to_int("114.0.0.0"), ip_to_int("114.255.255.255")),
+        (ip_to_int("115.0.0.0"), ip_to_int("115.255.255.255")),
+        (ip_to_int("116.0.0.0"), ip_to_int("116.255.255.255")),
+        (ip_to_int("117.0.0.0"), ip_to_int("117.255.255.255")),
+        (ip_to_int("118.0.0.0"), ip_to_int("118.255.255.255")),
+        (ip_to_int("119.0.0.0"), ip_to_int("119.255.255.255")),
+        (ip_to_int("171.0.0.0"), ip_to_int("171.255.255.255")),
+        (ip_to_int("175.0.0.0"), ip_to_int("175.255.255.255")),
+        (ip_to_int("180.0.0.0"), ip_to_int("180.255.255.255")),
+        (ip_to_int("182.0.0.0"), ip_to_int("182.255.255.255")),
+        (ip_to_int("183.0.0.0"), ip_to_int("183.255.255.255")),
+        (ip_to_int("202.0.0.0"), ip_to_int("202.255.255.255")),
+        (ip_to_int("203.0.0.0"), ip_to_int("203.255.255.255")),
+        (ip_to_int("218.0.0.0"), ip_to_int("218.255.255.255")),
+        (ip_to_int("219.0.0.0"), ip_to_int("219.255.255.255")),
+        (ip_to_int("220.0.0.0"), ip_to_int("220.255.255.255")),
+        (ip_to_int("221.0.0.0"), ip_to_int("221.255.255.255")),
+        (ip_to_int("222.0.0.0"), ip_to_int("222.255.255.255")),
+    ]
+    
+    # 联通主要IP段
+    unicom_ranges = [
+        (ip_to_int("58.0.0.0"), ip_to_int("58.255.255.255")),
+        (ip_to_int("60.0.0.0"), ip_to_int("60.255.255.255")),
+        (ip_to_int("110.0.0.0"), ip_to_int("110.255.255.255")),
+        (ip_to_int("111.0.0.0"), ip_to_int("111.255.255.255")),
+        (ip_to_int("112.0.0.0"), ip_to_int("112.255.255.255")),
+        (ip_to_int("113.0.0.0"), ip_to_int("113.255.255.255")),
+        (ip_to_int("114.0.0.0"), ip_to_int("114.255.255.255")),
+        (ip_to_int("115.0.0.0"), ip_to_int("115.255.255.255")),
+        (ip_to_int("116.0.0.0"), ip_to_int("116.255.255.255")),
+        (ip_to_int("117.0.0.0"), ip_to_int("117.255.255.255")),
+        (ip_to_int("118.0.0.0"), ip_to_int("118.255.255.255")),
+        (ip_to_int("119.0.0.0"), ip_to_int("119.255.255.255")),
+        (ip_to_int("123.0.0.0"), ip_to_int("123.255.255.255")),
+        (ip_to_int("124.0.0.0"), ip_to_int("124.255.255.255")),
+        (ip_to_int("202.0.0.0"), ip_to_int("202.255.255.255")),
+    ]
+    
+    # 移动主要IP段  
+    mobile_ranges = [
+        (ip_to_int("36.0.0.0"), ip_to_int("36.255.255.255")),
+        (ip_to_int("39.0.0.0"), ip_to_int("39.255.255.255")),
+        (ip_to_int("42.0.0.0"), ip_to_int("42.255.255.255")),
+        (ip_to_int("49.0.0.0"), ip_to_int("49.255.255.255")),
+        (ip_to_int("58.0.0.0"), ip_to_int("58.255.255.255")),
+        (ip_to_int("111.0.0.0"), ip_to_int("111.255.255.255")),
+        (ip_to_int("112.0.0.0"), ip_to_int("112.255.255.255")),
+        (ip_to_int("113.0.0.0"), ip_to_int("113.255.255.255")),
+        (ip_to_int("114.0.0.0"), ip_to_int("114.255.255.255")),
+        (ip_to_int("117.0.0.0"), ip_to_int("117.255.255.255")),
+        (ip_to_int("120.0.0.0"), ip_to_int("120.255.255.255")),
+        (ip_to_int("183.0.0.0"), ip_to_int("183.255.255.255")),
+        (ip_to_int("211.0.0.0"), ip_to_int("211.255.255.255")),
+        (ip_to_int("218.0.0.0"), ip_to_int("218.255.255.255")),
+        (ip_to_int("219.0.0.0"), ip_to_int("219.255.255.255")),
+        (ip_to_int("221.0.0.0"), ip_to_int("221.255.255.255")),
+        (ip_to_int("223.0.0.0"), ip_to_int("223.255.255.255")),
+    ]
+    
+    # 检查IP段归属（注意优先级）
+    for start, end in telecom_ranges:
+        if start <= ip_num <= end:
+            # 进一步检查是否在移动专属段中（避免误判）
+            mobile_specific = [
+                (ip_to_int("39.0.0.0"), ip_to_int("39.255.255.255")),
+                (ip_to_int("120.0.0.0"), ip_to_int("120.255.255.255")),
+                (ip_to_int("211.0.0.0"), ip_to_int("211.255.255.255")),
+            ]
+            for m_start, m_end in mobile_specific:
+                if m_start <= ip_num <= m_end:
+                    return "移动"
+            return "电信"
+    
+    for start, end in mobile_ranges:
+        if start <= ip_num <= end:
+            return "移动"
+            
+    for start, end in unicom_ranges:
+        if start <= ip_num <= end:
+            return "联通"
+    
+    return "未知"
+
+def clean_province_name(province):
+    """清理省份名称，去掉'省'和'市'字样"""
+    return province.replace("省", "").replace("市", "")
 
 # ===============================
-# 第一阶段 - 修改文件名生成逻辑
+# 第一阶段
 def first_stage():
     all_ips = set()
     for url, filename in FOFA_URLS.items():
@@ -118,23 +262,42 @@ def first_stage():
         time.sleep(3)
 
     province_isp_dict = {}
+    successful_queries = 0
+    failed_queries = 0
+    
     for ip_port in all_ips:
         try:
             ip = ip_port.split(":")[0]
             res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=10)
             data = res.json()
             province = data.get("regionName", "未知")
-            isp = get_isp(ip)
-            if isp == "未知":
-                continue
             
-            # 去除"省"和"市"字样
-            province_clean = province.replace("省", "").replace("市", "")
-            fname = f"{province_clean}{isp}.txt"
+            # 清理省份名称，去掉"省"和"市"
+            province = clean_province_name(province)
+            
+            # 使用新的精确ISP判断
+            isp = get_isp_precise(ip)
+            
+            if isp == "未知":
+                print(f"⚠️ 无法确定 {ip} 的运营商")
+                failed_queries += 1
+                continue
+                
+            fname = f"{province}{isp}.txt"
             province_isp_dict.setdefault(fname, set()).add(ip_port)
-        except Exception:
+            successful_queries += 1
+            
+            # 显示进度
+            if successful_queries % 10 == 0:
+                print(f"📊 已处理 {successful_queries} 个IP，失败 {failed_queries} 个")
+                
+        except Exception as e:
+            print(f"❌ 查询 {ip} 失败: {e}")
+            failed_queries += 1
             continue
 
+    print(f"✅ IP查询完成: 成功 {successful_queries}, 失败 {failed_queries}")
+    
     mode, run_count = check_and_clear_files_by_run_count()
     for filename, ip_set in province_isp_dict.items():
         path = os.path.join(IP_DIR, filename)
@@ -146,9 +309,9 @@ def first_stage():
     return run_count
 
 # ===============================
-# 第二阶段 - 修改为只生成rtp格式
+# 第二阶段
 def second_stage():
-    print("🔔 第二阶段触发：生成 zubo.txt（仅生成rtp格式）")
+    print("🔔 第二阶段触发：生成 zubo.txt")
     combined_lines = []
     for ip_file in os.listdir(IP_DIR):
         if not ip_file.endswith(".txt"):
@@ -170,15 +333,7 @@ def second_stage():
                 if "," not in rtp_line:
                     continue
                 ch_name, rtp_url = rtp_line.split(",", 1)
-                
-                # 提取组播地址
-                multicast_match = re.search(r'rtp://(.+)', rtp_url)
-                if multicast_match:
-                    multicast_addr = multicast_match.group(1)
-                    
-                    # 只生成rtp格式地址
-                    rtp_format_url = f"http://{ip_port}/rtp/{multicast_addr}"
-                    combined_lines.append(f"{ch_name},{rtp_format_url}")
+                combined_lines.append(f"{ch_name},http://{ip_port}/{rtp_url[1]}")
 
     # 去重
     unique = {}
@@ -190,12 +345,12 @@ def second_stage():
     with open(ZUBO_FILE, "w", encoding="utf-8") as f:
         for line in unique.values():
             f.write(line + "\n")
-    print(f"🎯 第二阶段完成，共 {len(unique)} 条有效 URL（仅rtp格式）")
+    print(f"🎯 第二阶段完成，共 {len(unique)} 条有效 URL")
 
 # ===============================
-# 第三阶段 - 修改为先检测rtp，失败则尝试udp
+# 第三阶段
 def third_stage():
-    print("🧩 第三阶段：多线程检测频道生成 IPTV.txt（优先rtp，失败则尝试udp）")
+    print("🧩 第三阶段：多线程检测代表频道生成 IPTV.txt")
 
     if not os.path.exists(ZUBO_FILE):
         print("⚠️ zubo.txt 不存在，跳过")
@@ -222,7 +377,6 @@ def third_stage():
     for fname in os.listdir(IP_DIR):
         if not fname.endswith(".txt"):
             continue
-        # 注意：这里保留原始文件名（已去除省市字样）
         province_operator = fname.replace(".txt", "")
         path = os.path.join(IP_DIR, fname)
         with open(path, encoding="utf-8") as f:
@@ -230,8 +384,7 @@ def third_stage():
                 ip_port = line.strip()
                 ip_info[ip_port] = province_operator
 
-    # 读取zubo.txt中的频道信息（都是rtp格式）
-    channels_by_ip = {}
+    groups = {}
     with open(ZUBO_FILE, encoding="utf-8") as f:
         for line in f:
             if "," not in line:
@@ -241,87 +394,52 @@ def third_stage():
             m = re.match(r"http://(\d+\.\d+\.\d+\.\d+:\d+)/", url)
             if m:
                 ip_port = m.group(1)
-                # 提取组播地址
-                multicast_match = re.search(r'/rtp/(.+)', url)
-                if multicast_match:
-                    multicast_addr = multicast_match.group(1)
-                    channels_by_ip.setdefault(ip_port, []).append((ch_main, multicast_addr))
+                groups.setdefault(ip_port, []).append((ch_main, url))
 
-    def detect_channel(ip_port, ch_main, multicast_addr):
-        # 先尝试rtp格式
-        rtp_url = f"http://{ip_port}/rtp/{multicast_addr}"
-        if check_stream(rtp_url):
-            return ip_port, ch_main, rtp_url, "rtp"
-        
-        # rtp格式失败，尝试udp格式
-        udp_url = f"http://{ip_port}/udp/{multicast_addr}"
-        if check_stream(udp_url):
-            return ip_port, ch_main, udp_url, "udp"
-        
-        # 两种格式都失败
-        return ip_port, ch_main, None, None
+    def detect_ip(ip_port, entries):
+        rep_channels = [u for c, u in entries if c == "CCTV-1综合"]
+        if not rep_channels and entries:
+            rep_channels = [entries[0][1]]
+        playable = any(check_stream(u) for u in rep_channels)
+        return ip_port, playable
 
-    print(f"🚀 启动多线程检测（共 {len(channels_by_ip)} 个 IP）...")
-    
-    valid_channels = []
-    total_channels = sum(len(channels) for channels in channels_by_ip.values())
-    processed = 0
-    
+    print(f"🚀 启动多线程检测（共 {len(groups)} 个 IP）...")
+    playable_ips = set()
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        # 为每个频道创建检测任务
-        futures = []
-        for ip_port, channels in channels_by_ip.items():
-            for ch_main, multicast_addr in channels:
-                futures.append(executor.submit(detect_channel, ip_port, ch_main, multicast_addr))
-        
-        # 处理检测结果
+        futures = {executor.submit(detect_ip, ip, chs): ip for ip, chs in groups.items()}
         for future in concurrent.futures.as_completed(futures):
-            ip_port, ch_main, url, format_type = future.result()
-            processed += 1
-            
-            if url:  # 如果检测成功
-                province_operator = ip_info.get(ip_port, "未知")
-                valid_channels.append((ch_main, url, province_operator))
-                
-            # 打印进度
-            if processed % 100 == 0 or processed == total_channels:
-                print(f"📊 检测进度: {processed}/{total_channels}，有效频道: {len(valid_channels)}")
+            ip_port, ok = future.result()
+            if ok:
+                playable_ips.add(ip_port)
 
-    print(f"✅ 检测完成，有效频道: {len(valid_channels)} 个")
-    
-    # 统计格式使用情况
-    rtp_count = sum(1 for _, url, _ in valid_channels if "/rtp/" in url)
-    udp_count = sum(1 for _, url, _ in valid_channels if "/udp/" in url)
-    print(f"   - RTP 格式: {rtp_count} 个")
-    print(f"   - UDP 格式: {udp_count} 个")
+    print(f"✅ 检测完成，可播放 IP 共 {len(playable_ips)} 个")
 
-    # 去重
+    valid_lines = []
     seen = set()
-    unique_channels = []
-    for ch_main, url, province_operator in valid_channels:
-        key = f"{ch_main},{url}"
-        if key not in seen:
-            seen.add(key)
-            unique_channels.append(f"{ch_main},{url}${province_operator}")
+
+    for ip_port in playable_ips:
+        province_operator = ip_info.get(ip_port, "未知")
+        for c, u in groups[ip_port]:
+            key = f"{c},{u}"
+            if key not in seen:
+                seen.add(key)
+                valid_lines.append(f"{c},{u}${province_operator}")
 
     beijing_now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-    disclaimer_url = "https://kakaxi-1.asia/LOGO/Disclaimer.mp4"
 
     with open(IPTV_FILE, "w", encoding="utf-8") as f:
-        f.write(f"#更新时间: {beijing_now}（北京时间）\n\n")
-        f.write("#更新时间,#genre#\n")
-        f.write(f"#{beijing_now},{disclaimer_url}\n\n")
-
+        f.write(f"更新时间: {beijing_now}（北京时间）\n\n")
+        
         for category, ch_list in CHANNEL_CATEGORIES.items():
             f.write(f"{category},#genre#\n")
             for ch in ch_list:
-                for line in unique_channels:
+                for line in valid_lines:
                     name = line.split(",", 1)[0]
                     if name == ch:
                         f.write(line + "\n")
             f.write("\n")
 
-    print(f"🎯 IPTV.txt 生成完成（含更新时间），共 {len(unique_channels)} 条频道")
+    print(f"🎯 IPTV.txt 生成完成（含更新时间），共 {len(valid_lines)} 条频道")
 
 # ===============================
 # 文件推送  
