@@ -332,9 +332,9 @@ def third_stage():
     disclaimer_url = "https://kakaxi-1.asia/LOGO/Disclaimer.mp4"
 
     with open(IPTV_FILE, "w", encoding="utf-8") as f:
-        f.write(f"更新时间: {beijing_now}（北京时间）\n\n")
-        f.write("更新时间,#genre#\n")
-        f.write(f"{beijing_now},{disclaimer_url}\n\n")
+        f.write(f"#更新时间: {beijing_now}（北京时间）\n\n")
+        f.write("#更新时间,#genre#\n")
+        f.write(f"#{beijing_now},{disclaimer_url}\n\n")
 
         for category, ch_list in CHANNEL_CATEGORIES.items():
             f.write(f"{category},#genre#\n")
