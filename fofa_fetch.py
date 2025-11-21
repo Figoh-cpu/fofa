@@ -122,39 +122,20 @@ def first_stage():
             print(f"❌ 爬取失败：{e}")
         time.sleep(3)
 
-    province_isp_dict = {}
-    successful_queries = 0
-    failed_queries = 0
-    
+    province_isp_dict = {}   
     for ip_port in all_ips:
         try:
             ip = ip_port.split(":")[0]
             res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=10)
             data = res.json()
             province = data.get("regionName", "未知").replace("省", "").replace("市", "")
-                     
-            # 使用新的精确ISP判断
-            isp = get_isp_precise(ip)
-            
+            isp = get_isp(ip)
             if isp == "未知":
-                print(f"⚠️ 无法确定 {ip} 的运营商")
-                failed_queries += 1
                 continue
-                
             fname = f"{province}{isp}.txt"
             province_isp_dict.setdefault(fname, set()).add(ip_port)
-            successful_queries += 1
-            
-            # 显示进度
-            if successful_queries % 10 == 0:
-                print(f"📊 已处理 {successful_queries} 个IP，失败 {failed_queries} 个")
-                
-        except Exception as e:
-            print(f"❌ 查询 {ip} 失败: {e}")
-            failed_queries += 1
+        except Exception:
             continue
-
-    print(f"✅ IP查询完成: 成功 {successful_queries}, 失败 {failed_queries}")
     
     mode, run_count = check_and_clear_files_by_run_count()
     for filename, ip_set in province_isp_dict.items():
