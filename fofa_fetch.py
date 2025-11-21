@@ -92,156 +92,16 @@ def check_and_clear_files_by_run_count():
         return "a", count
 
 # ===============================
-# 精确IP运营商判断
-def get_isp_precise(ip):
-    """
-    使用精确的IP段数据库判断运营商
-    返回: "电信", "联通", "移动", "广电", "教育网", "未知"
-    """
-    try:
-        # 方案1: 使用ipapi.is（免费，无需API key）
-        resp = requests.get(f"http://ipapi.is/{ip}", timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            asn_org = data.get("asn", {}).get("org", "").upper()
-            isp = data.get("connection", {}).get("isp", "").upper()
-            
-            # 关键词匹配
-            if any(x in asn_org or x in isp for x in ["CHINANET", "TELECOM", "电信"]):
-                return "电信"
-            elif any(x in asn_org or x in isp for x in ["UNICOM", "CNC", "联通", "网通"]):
-                return "联通" 
-            elif any(x in asn_org or x in isp for x in ["CMNET", "MOBILE", "移动"]):
-                return "移动"
-            elif any(x in asn_org or x in isp for x in ["CBN", "广电"]):
-                return "广电"
-            elif any(x in asn_org or x in isp for x in ["CERNET", "教育网"]):
-                return "教育网"
-        
-        # 方案2: 备用 - 使用ip-api.com
-        resp = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            isp = data.get("isp", "").upper()
-            asn = data.get("as", "").upper()
-            
-            if any(x in isp or x in asn for x in ["CHINANET", "TELECOM", "电信"]):
-                return "电信"
-            elif any(x in isp or x in asn for x in ["UNICOM", "CNC", "联通"]):
-                return "联通"
-            elif any(x in isp or x in asn for x in ["CMNET", "MOBILE", "移动"]):
-                return "移动"
-            elif any(x in isp or x in asn for x in ["CBN", "广电"]):
-                return "广电"
-                
-    except Exception:
-        pass
-    
-    # 方案3: 最终备用 - 基于已知精确IP段
-    def ip_to_int(ip):
-        """将IP地址转换为整数"""
-        parts = ip.split('.')
-        return (int(parts[0]) << 24) + (int(parts[1]) << 16) + (int(parts[2]) << 8) + int(parts[3])
-    
-    ip_num = ip_to_int(ip)
-    
-    # 电信主要IP段（精确）
-    telecom_ranges = [
-        (ip_to_int("1.0.0.0"), ip_to_int("1.255.255.255")),
-        (ip_to_int("14.0.0.0"), ip_to_int("14.255.255.255")),
-        (ip_to_int("27.0.0.0"), ip_to_int("27.255.255.255")),
-        (ip_to_int("36.0.0.0"), ip_to_int("36.255.255.255")),
-        (ip_to_int("42.0.0.0"), ip_to_int("42.255.255.255")),
-        (ip_to_int("49.0.0.0"), ip_to_int("49.255.255.255")),
-        (ip_to_int("58.0.0.0"), ip_to_int("58.255.255.255")),
-        (ip_to_int("60.0.0.0"), ip_to_int("60.255.255.255")),
-        (ip_to_int("110.0.0.0"), ip_to_int("110.255.255.255")),
-        (ip_to_int("111.0.0.0"), ip_to_int("111.255.255.255")),
-        (ip_to_int("112.0.0.0"), ip_to_int("112.255.255.255")),
-        (ip_to_int("113.0.0.0"), ip_to_int("113.255.255.255")),
-        (ip_to_int("114.0.0.0"), ip_to_int("114.255.255.255")),
-        (ip_to_int("115.0.0.0"), ip_to_int("115.255.255.255")),
-        (ip_to_int("116.0.0.0"), ip_to_int("116.255.255.255")),
-        (ip_to_int("117.0.0.0"), ip_to_int("117.255.255.255")),
-        (ip_to_int("118.0.0.0"), ip_to_int("118.255.255.255")),
-        (ip_to_int("119.0.0.0"), ip_to_int("119.255.255.255")),
-        (ip_to_int("171.0.0.0"), ip_to_int("171.255.255.255")),
-        (ip_to_int("175.0.0.0"), ip_to_int("175.255.255.255")),
-        (ip_to_int("180.0.0.0"), ip_to_int("180.255.255.255")),
-        (ip_to_int("182.0.0.0"), ip_to_int("182.255.255.255")),
-        (ip_to_int("183.0.0.0"), ip_to_int("183.255.255.255")),
-        (ip_to_int("202.0.0.0"), ip_to_int("202.255.255.255")),
-        (ip_to_int("203.0.0.0"), ip_to_int("203.255.255.255")),
-        (ip_to_int("218.0.0.0"), ip_to_int("218.255.255.255")),
-        (ip_to_int("219.0.0.0"), ip_to_int("219.255.255.255")),
-        (ip_to_int("220.0.0.0"), ip_to_int("220.255.255.255")),
-        (ip_to_int("221.0.0.0"), ip_to_int("221.255.255.255")),
-        (ip_to_int("222.0.0.0"), ip_to_int("222.255.255.255")),
-    ]
-    
-    # 联通主要IP段
-    unicom_ranges = [
-        (ip_to_int("58.0.0.0"), ip_to_int("58.255.255.255")),
-        (ip_to_int("60.0.0.0"), ip_to_int("60.255.255.255")),
-        (ip_to_int("110.0.0.0"), ip_to_int("110.255.255.255")),
-        (ip_to_int("111.0.0.0"), ip_to_int("111.255.255.255")),
-        (ip_to_int("112.0.0.0"), ip_to_int("112.255.255.255")),
-        (ip_to_int("113.0.0.0"), ip_to_int("113.255.255.255")),
-        (ip_to_int("114.0.0.0"), ip_to_int("114.255.255.255")),
-        (ip_to_int("115.0.0.0"), ip_to_int("115.255.255.255")),
-        (ip_to_int("116.0.0.0"), ip_to_int("116.255.255.255")),
-        (ip_to_int("117.0.0.0"), ip_to_int("117.255.255.255")),
-        (ip_to_int("118.0.0.0"), ip_to_int("118.255.255.255")),
-        (ip_to_int("119.0.0.0"), ip_to_int("119.255.255.255")),
-        (ip_to_int("123.0.0.0"), ip_to_int("123.255.255.255")),
-        (ip_to_int("124.0.0.0"), ip_to_int("124.255.255.255")),
-        (ip_to_int("202.0.0.0"), ip_to_int("202.255.255.255")),
-    ]
-    
-    # 移动主要IP段  
-    mobile_ranges = [
-        (ip_to_int("36.0.0.0"), ip_to_int("36.255.255.255")),
-        (ip_to_int("39.0.0.0"), ip_to_int("39.255.255.255")),
-        (ip_to_int("42.0.0.0"), ip_to_int("42.255.255.255")),
-        (ip_to_int("49.0.0.0"), ip_to_int("49.255.255.255")),
-        (ip_to_int("58.0.0.0"), ip_to_int("58.255.255.255")),
-        (ip_to_int("111.0.0.0"), ip_to_int("111.255.255.255")),
-        (ip_to_int("112.0.0.0"), ip_to_int("112.255.255.255")),
-        (ip_to_int("113.0.0.0"), ip_to_int("113.255.255.255")),
-        (ip_to_int("114.0.0.0"), ip_to_int("114.255.255.255")),
-        (ip_to_int("117.0.0.0"), ip_to_int("117.255.255.255")),
-        (ip_to_int("120.0.0.0"), ip_to_int("120.255.255.255")),
-        (ip_to_int("183.0.0.0"), ip_to_int("183.255.255.255")),
-        (ip_to_int("211.0.0.0"), ip_to_int("211.255.255.255")),
-        (ip_to_int("218.0.0.0"), ip_to_int("218.255.255.255")),
-        (ip_to_int("219.0.0.0"), ip_to_int("219.255.255.255")),
-        (ip_to_int("221.0.0.0"), ip_to_int("221.255.255.255")),
-        (ip_to_int("223.0.0.0"), ip_to_int("223.255.255.255")),
-    ]
-    
-    # 检查IP段归属（注意优先级）
-    for start, end in telecom_ranges:
-        if start <= ip_num <= end:
-            # 进一步检查是否在移动专属段中（避免误判）
-            mobile_specific = [
-                (ip_to_int("39.0.0.0"), ip_to_int("39.255.255.255")),
-                (ip_to_int("120.0.0.0"), ip_to_int("120.255.255.255")),
-                (ip_to_int("211.0.0.0"), ip_to_int("211.255.255.255")),
-            ]
-            for m_start, m_end in mobile_specific:
-                if m_start <= ip_num <= m_end:
-                    return "移动"
-            return "电信"
-    
-    for start, end in mobile_ranges:
-        if start <= ip_num <= end:
-            return "移动"
-            
-    for start, end in unicom_ranges:
-        if start <= ip_num <= end:
-            return "联通"
-    
-    return "未知"
+# IP 运营商判断
+def get_isp(ip):
+    if re.match(r"^(1[0-9]{2}|2[0-3]{2}|42|43|58|59|60|61|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|175|180|182|183|184|185|186|187|188|189|223)\.", ip):
+        return "电信"
+    elif re.match(r"^(42|43|58|59|60|61|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|175|180|182|183|184|185|186|187|188|189|223)\.", ip):
+        return "联通"
+    elif re.match(r"^(223|36|37|38|39|100|101|102|103|104|105|106|107|108|109|134|135|136|137|138|139|150|151|152|157|158|159|170|178|182|183|184|187|188|189)\.", ip):
+        return "移动"
+    else:
+        return "未知"
 
 def clean_province_name(province):
     """清理省份名称，去掉'省'和'市'字样"""
