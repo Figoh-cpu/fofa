@@ -428,7 +428,7 @@ def third_stage():
     beijing_now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
 
     with open(IPTV_FILE, "w", encoding="utf-8") as f:
-        f.write(f"更新时间: {beijing_now}（北京时间）\n\n")
+        f.write(f"# 更新时间: {beijing_now}（北京时间）\n\n")
         
         for category, ch_list in CHANNEL_CATEGORIES.items():
             f.write(f"{category},#genre#\n")
