@@ -123,13 +123,13 @@ def first_stage():
             print(f"❌ 爬取失败：{e}")
         time.sleep(3)
 
-    province_isp_dict = {}   
+    province_isp_dict = {}
     for ip_port in all_ips:
         try:
             ip = ip_port.split(":")[0]
             res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=10)
             data = res.json()
-            province = data.get("regionName", "未知").replace("省", "").replace("市", "")
+            province = data.get("regionName", "未知")
             isp = get_isp(ip)
             if isp == "未知":
                 continue
@@ -137,7 +137,7 @@ def first_stage():
             province_isp_dict.setdefault(fname, set()).add(ip_port)
         except Exception:
             continue
-    
+
     mode, run_count = check_and_clear_files_by_run_count()
     for filename, ip_set in province_isp_dict.items():
         path = os.path.join(IP_DIR, filename)
