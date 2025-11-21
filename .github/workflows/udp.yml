@@ -36,7 +36,7 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@users.noreply.github.com"
           git add num.txt
-          git add ip/*.txt || true
+          git add uip/*.txt || true
           git add udp.txt || true
-          git commit -m "自动更新：计数、IP文件、udp.txt" || echo "⚠️ 无需提交"
+          git commit -m "自动更新：计数、UIP文件、udp.txt" || echo "⚠️ 无需提交"
           git push origin main || echo "⚠️ 推送失败"
