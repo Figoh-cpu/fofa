@@ -108,6 +108,9 @@ def get_isp(ip):
     except Exception:
         return "未知"
 
+def clean_province_name(province):
+    """清理省份名称，去掉'省'和'市'字样"""
+    return province.replace("省", "").replace("市", "")
 # ===============================
 # 第一阶段
 def first_stage():
