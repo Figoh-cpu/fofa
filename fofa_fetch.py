@@ -108,9 +108,6 @@ def get_isp(ip):
     except Exception:
         return "未知"
 
-def clean_province_name(province):
-    """清理省份名称，去掉'省'和'市'字样"""
-    return province.replace("省", "").replace("市", "")
 # ===============================
 # 第一阶段
 def first_stage():
@@ -134,11 +131,8 @@ def first_stage():
             ip = ip_port.split(":")[0]
             res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=10)
             data = res.json()
-            province = data.get("regionName", "未知")
-            
-            # 清理省份名称，去掉"省"和"市"
-            province = clean_province_name(province)
-            
+            province = data.get("regionName", "未知").replace("省", "").replace("市", "")
+                     
             # 使用新的精确ISP判断
             isp = get_isp_precise(ip)
             
