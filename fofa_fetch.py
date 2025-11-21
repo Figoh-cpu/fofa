@@ -97,16 +97,17 @@ def get_isp(ip):
     try:
         res = requests.get(f"http://ip.taobao.com/service/getIpInfo.php?ip={ip}", timeout=3)
         data = res.json()
-        if data["code"] != 0:
-            return "未知"
-        isp_full = data["data"]["isp"]
-        # 提取核心关键词
-        for keyword in ["电信", "联通", "移动"]:
-            if keyword in isp_full:
-                return keyword
-        return isp_full  # 处理广电、铁通等其他运营商
-    except Exception:
-        return "未知"
+        if data["code"] == 0:
+            isp = data["data"]["isp"]
+            # 标准化运营商名称
+            if "电信" in isp:
+                return "电信"
+            elif "联通" in isp:
+                return "联通" 
+            elif "移动" in isp:
+                return "移动"
+            else:
+                return "未知"
 
 # ===============================
 # 第一阶段
