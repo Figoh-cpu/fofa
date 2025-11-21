@@ -94,18 +94,19 @@ def check_and_clear_files_by_run_count():
 # ===============================
 # IP 运营商判断
 def get_isp(ip):
-    if re.match(r"^(1[0-9]{2}|2[0-3]{2}|42|43|58|59|60|61|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|175|180|182|183|184|185|186|187|188|189|223)\.", ip):
-        return "电信"
-    elif re.match(r"^(42|43|58|59|60|61|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|175|180|182|183|184|185|186|187|188|189|223)\.", ip):
-        return "联通"
-    elif re.match(r"^(223|36|37|38|39|100|101|102|103|104|105|106|107|108|109|134|135|136|137|138|139|150|151|152|157|158|159|170|178|182|183|184|187|188|189)\.", ip):
-        return "移动"
-    else:
+    try:
+        res = requests.get(f"http://ip.taobao.com/service/getIpInfo.php?ip={ip}", timeout=3)
+        data = res.json()
+        if data["code"] != 0:
+            return "未知"
+        isp_full = data["data"]["isp"]
+        # 提取核心关键词
+        for keyword in ["电信", "联通", "移动"]:
+            if keyword in isp_full:
+                return keyword
+        return isp_full  # 处理广电、铁通等其他运营商
+    except Exception:
         return "未知"
-
-def clean_province_name(province):
-    """清理省份名称，去掉'省'和'市'字样"""
-    return province.replace("省", "").replace("市", "")
 
 # ===============================
 # 第一阶段
