@@ -16,7 +16,7 @@ HEADERS = {
 }
 
 COUNTER_FILE = "num.txt"
-IP_DIR = "ip"
+IP_DIR = "uip"
 udp_DIR = "udp"
 ZUBO_FILE = "zubo.txt"
 IPTV_FILE = "udp.txt"
@@ -302,9 +302,9 @@ def push_all_files():
     os.system('git config --global user.name "github-actions"')
     os.system('git config --global user.email "github-actions@users.noreply.github.com"')
     os.system("git add num.txt")
-    os.system("git add ip/*.txt || true")
+    os.system("git add uip/*.txt || true")
     os.system("git add udp.txt || true")
-    os.system('git commit -m "自动更新：计数、IP文件、udp.txt" || echo "⚠️ 无需提交"')
+    os.system('git commit -m "自动更新：计数、UIP文件、udp.txt" || echo "⚠️ 无需提交"')
     os.system("git push origin main || echo '⚠️ 推送失败'")
 
 
